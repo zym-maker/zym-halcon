@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.1" halcon_version="12.0.1">
+<procedure name="main">
+<interface/>
+<body>
+<c>* fin.hdev: Detection of a fin</c>
+<c>*关闭程序计数器，变量更新，图像更新窗口</c>
+<l>dev_update_window ('off')</l>
+<c>*一次性读取3张图像</c>
+<l>read_image (Fins, 'fin' + [1:3])</l>
+<c>*获取图像宽高</c>
+<l>get_image_size (Fins, Width, Height)</l>
+<c>*关闭窗口</c>
+<l>dev_close_window ()</l>
+<c>*打开窗口</c>
+<l>dev_open_window (0, 0, Width[0], Height[0], 'black', WindowID)</l>
+<c>*设置字体信息</c>
+<l>set_display_font (WindowID, 14, 'mono', 'true', 'false')</l>
+<l>for I := 1 to 3 by 1</l>
+<c>    *选择图像集合里的指定索引的图像</c>
+<l>    select_obj (Fins, Fin, I)</l>
+<c>    *显示图像</c>
+<l>    dev_display (Fin)</l>
+<c>    *图像二值化,获取背景为亮的区域</c>
+<l>    binary_threshold (Fin, Background, 'max_separability', 'light', UsedThreshold)</l>
+<c>    *设置输出对象颜色</c>
+<l>    dev_set_color ('blue')</l>
+<c>    *设置区域填充模式</c>
+<l>    dev_set_draw ('margin')</l>
+<c>    *设置输出对象的线宽</c>
+<l>    dev_set_line_width (4)</l>
+<c>    *显示背景区域</c>
+<l>    dev_display (Background)</l>
+<c>    *对区域闭运算</c>
+<l>    closing_circle (Background, ClosedBackground, 250)</l>
+<c>    *设置输出对象的颜色</c>
+<l>    dev_set_color ('green')</l>
+<c>    *显示闭运算区域</c>
+<l>    dev_display (ClosedBackground)</l>
+<l>    stop ()</l>
+<c>    *闭运算区域和背景区域</c>
+<l>    difference (ClosedBackground, Background, RegionDifference)</l>
+<c>    *开运算消除边缘周边毛刺</c>
+<l>    opening_rectangle1 (RegionDifference, FinRegion, 5, 5)</l>
+<c>    *显示图像</c>
+<l>    dev_display (Fin)</l>
+<c>    *设置输出对象的颜色</c>
+<l>    dev_set_color ('red')</l>
+<c>    *显示最终的毛刺区域</c>
+<l>    dev_display (FinRegion)</l>
+<c>    *获取区域的面积，中心行坐标，中心列坐标</c>
+<l>    area_center (FinRegion, FinArea, Row, Column)</l>
+<l>    if (I &lt; 3)</l>
+<l>        disp_continue_message (WindowID, 'black', 'true')</l>
+<l>        stop ()</l>
+<l>    endif</l>
+<l>endfor</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+</hdevelop>
