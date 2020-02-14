@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.1" halcon_version="12.0.1">
+<procedure name="main">
+<interface/>
+<body>
+<c>* 检测瓶口缺陷</c>
+<c>* </c>
+<c>* </c>
+<c>* tuning parameters</c>
+<l>SmoothX := 501</l>
+<l>ThresholdOffset := 25</l>
+<l>MinDefectSize := 50</l>
+<c>* </c>
+<c>* initialization</c>
+<l>PolarResolution := 640</l>
+<l>RingSize := 70</l>
+<c>*获取存放空区域的状态</c>
+<l>get_system ('store_empty_region', StoreEmptyRegion)</l>
+<c>*设置存放空区域的状态</c>
+<l>set_system ('store_empty_region', 'false')</l>
+<c>*读取图像</c>
+<l>read_image (Image, 'bottles/bottle_mouth_01')</l>
+<c>*关闭程序计数器，变量更新，图形窗口更新</c>
+<l>dev_update_off ()</l>
+<c>*关闭窗口</c>
+<l>dev_close_window ()</l>
+<l>dev_close_window ()</l>
+<c>*按图像大小创建一个新窗口</c>
+<l>dev_open_window_fit_image (Image, 0, 0, 640, 512, WindowHandle1)</l>
+<c>*设置字体信息</c>
+<l>set_display_font (WindowHandle1, 16, 'mono', 'true', 'false')</l>
+<c>*显示图像</c>
+<l>dev_display (Image)</l>
+<c>*设置区域填充方式</c>
+<l>dev_set_draw ('margin')</l>
+<c>*设置输出对象线宽</c>
+<l>dev_set_line_width (3)</l>
+<c>*按图像大小创建一个新窗口</c>
+<l>dev_open_window_fit_size (0, 648, RingSize, PolarResolution, 150, 512, WindowHandle)</l>
+<c>*设置区域填充方式</c>
+<l>dev_set_draw ('margin')</l>
+<c>*设置输出对象线宽</c>
+<l>dev_set_line_width (3)</l>
+<c>*设置对象显示颜色</c>
+<l>dev_set_color ('red')</l>
+<c></c>
+<c>*激活WindowHandle1窗口</c>
+<l>dev_set_window(WindowHandle1)</l>
+<c>* Main loop</c>
+<c>* </c>
+<c>* Detect defects in bottle necks</c>
+<l>for Index := 2 to 16 by 1</l>
+<c>    *读取一张图像</c>
+<l>    read_image (Image, 'bottles/bottle_mouth_'+Index$'.02')</l>
+<c>    *显示图像</c>
+<l>    dev_display (Image) </l>
+<c>    *自动阈值</c>
+<l>    auto_threshold (Image, Regions, 2)</l>
+<c>    *获取区域一</c>
+<l>    select_obj (Regions, DarkRegion, 1)</l>
+<c>    *对区域一进行开运算</c>
+<l>    opening_circle (DarkRegion, RegionOpening, 3.5)</l>
+<c>    *对开运算区域进行闭运算</c>
+<l>    closing_circle (RegionOpening, RegionClosing, 25.5)</l>
+<c>    *填充闭运算后区域</c>
+<l>    fill_up (RegionClosing, RegionFillUp)</l>
+<c>    *获取区域外边界</c>
+<l>    boundary (RegionFillUp, RegionBorder, 'outer')</l>
+<c>    *对区域边界进行膨胀运算</c>
+<l>    dilation_circle (RegionBorder, RegionDilation, 3.5)</l>
+<c>    *剪切区域里的图像</c>
+<l>    reduce_domain (Image, RegionDilation, ImageReduced)</l>
+<c>    * </c>
+<c>    * 运用CANNY算法进行边缘探测</c>
+<l>    edges_sub_pix (ImageReduced, Edges, 'canny', 0.5, 20, 40)</l>
+<c>    *对边缘轮廓分割成直线和圆</c>
+<l>    segment_contours_xld (Edges, ContoursSplit, 'lines_circles', 5, 4, 2)</l>
+<c>    *将共圆上的轮廓连接起来</c>
+<l>    union_cocircular_contours_xld (ContoursSplit, UnionContours, 0.9, 0.5, 0.5, 200, 50, 50, 'true', 1)</l>
+<c>    *获取轮廓的长度</c>
+<l>    length_xld (UnionContours, Length)</l>
+<c>    *对长度数值进行降序排列，并获取数值最大的长度值</c>
+<l>    select_obj (UnionContours, LongestContour, sort_index(Length)[|Length|-1]+1)</l>
+<c>    *对最大的轮廓进行拟合圆操作</c>
+<l>    fit_circle_contour_xld (LongestContour, 'ahuber', -1, 0, 0, 3, 2, Row, Column, Radius, StartPhi, EndPhi, PointOrder)</l>
+<c>    * </c>
+<c>    * Part 2: Transform the ring-shaped bottle neck region to a rectangle</c>
+<c>    *生成拟合圆</c>
+<l>    gen_circle (Circle, Row, Column, Radius)</l>
+<c>    *对拟合圆进行膨胀运算</c>
+<l>    dilation_circle (Circle, RegionDilation, 5)</l>
+<c>    *对拟合圆进行腐蚀运算</c>
+<l>    erosion_circle (Circle, RegionErosion, RingSize-5)</l>
+<c>    *求两区域补集</c>
+<l>    difference (RegionDilation, RegionErosion, RegionDifference)</l>
+<c>    *获取补集区域里的图像</c>
+<l>    reduce_domain (Image, RegionDifference, ImageReduced)</l>
+<c>    *将图像从笛卡尔直角坐标系转换到极坐标系</c>
+<l>    polar_trans_image (ImageReduced, ImagePolar, Row, Column, PolarResolution, Radius+5)</l>
+<c>    * </c>
+<c>    * Part 3: Find defects with a dynamic threshold</c>
+<c>    * Note the strong smoothing in x-direction in the transformed image.</c>
+<c>    *剪切矩形区域里的图像</c>
+<l>    crop_part (ImagePolar, ImagePart, Radius-RingSize, 0, PolarResolution, RingSize)</l>
+<c>    *将最大灰度值在0-255范围拉伸</c>
+<l>    scale_image_max (ImagePart, ImageScaleMax)</l>
+<c>    *对灰度拉伸的图像进行均值滤波</c>
+<l>    mean_image (ImageScaleMax, ImageMean, SmoothX, 3)</l>
+<c>    *局部阈值处理</c>
+<l>    dyn_threshold (ImageScaleMax, ImageMean, Regions1, 50, 'not_equal')</l>
+<c>    *连通处理</c>
+<l>    connection (Regions1, Connection)</l>
+<c>    *根据高度过滤区域</c>
+<l>    select_shape (Connection, SelectedRegions, 'height', 'and', 9, 99999)</l>
+<c>    * 用矩形结构元素进行闭运算</c>
+<l>    closing_rectangle1 (SelectedRegions, RegionClosing1, 10, 20)</l>
+<c>    *将区域连接起来</c>
+<l>    union1 (RegionClosing1, RegionUnion)</l>
+<c>    * 将区域从极坐标转换到直角坐标系中</c>
+<l>    polar_trans_region_inv (RegionUnion, XYTransRegion, Row, Column, 6.28319, 0, Radius-RingSize, Radius, 640, RingSize, 1280, 1024, 'nearest_neighbor')</l>
+<c>    * </c>
+<c>    * Part 4: Display results</c>
+<c>    * 激活窗口WindowHandle1</c>
+<l>    dev_set_window (WindowHandle1)</l>
+<l>    dev_display (Image)</l>
+<l>    dev_set_color ('blue')</l>
+<l>    dev_display (RegionDifference)</l>
+<l>    dev_set_color ('red')</l>
+<l>    dev_display (XYTransRegion)</l>
+<c>    * display polar transformed inspected region with results</c>
+<c>    * The image and resulting region are rotated by 90 degrees</c>
+<c>    * only for visualization purposes! (I.e. to fit better on the screen)</c>
+<c>    * The rotation is NOT necessary for the detection algorithm.</c>
+<c>    *激活窗口WindowHandle</c>
+<l>    dev_set_window (WindowHandle)</l>
+<c>    *旋转图像</c>
+<l>    rotate_image (ImagePart, ImageRotate, 90, 'constant')</l>
+<l>    dev_display (ImageRotate)</l>
+<l>    count_obj (RegionUnion, Number)</l>
+<l>    if (Number&gt;0)</l>
+<c>        *缺陷区域沿对角线镜像</c>
+<l>        mirror_region (RegionUnion, RegionMirror, 'diagonal', PolarResolution)</l>
+<c>        *对镜像区域再次沿列方向镜像</c>
+<l>        mirror_region (RegionMirror, RegionMirror, 'row', PolarResolution)</l>
+<c>        *显示镜像以后的区域</c>
+<l>        dev_display (RegionMirror)</l>
+<l>        disp_message (WindowHandle1, 'Not OK', 'window', -1, -1, 'red', 'false')</l>
+<l>    else</l>
+<l>        disp_message (WindowHandle1, 'OK', 'window', -1, -1, 'forest green', 'false')</l>
+<l>    endif</l>
+<l>    if (Index&lt;16)</l>
+<l>        disp_continue_message (WindowHandle1, 'black', 'true')</l>
+<l>        stop ()</l>
+<l>    endif</l>
+<c>    </c>
+<l>    dev_set_window (WindowHandle1)</l>
+<c>    </c>
+<l>endfor</l>
+<c>* 恢复存储空区域的状态</c>
+<l>set_system ('store_empty_region', StoreEmptyRegion)</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+</hdevelop>
