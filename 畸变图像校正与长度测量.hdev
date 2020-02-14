@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.1" halcon_version="12.0.1">
+<procedure name="main">
+<interface/>
+<body>
+<c>* This program measures the length of scratches in world</c>
+<c>* coordinates in a perspectively distorted image</c>
+<c>*************************************************************1.初始化******************************************************************************</c>
+<c>* 关闭窗口</c>
+<l>dev_close_window ()</l>
+<c>* 更新程序计数器，更新变量，更新图形窗口</c>
+<l>dev_update_off ()</l>
+<c>* 设置区域填充模式</c>
+<l>dev_set_draw ('margin')</l>
+<c>* 读取图像</c>
+<l>read_image (Image, 'scratch/scratch_perspective')</l>
+<c>* 获取图像类型，宽度，高度，缓存数据</c>
+<l>get_image_pointer1 (Image, Pointer, Type, Width, Height)</l>
+<c>* 打开窗口</c>
+<l>dev_open_window (0, 0, Width, Height, 'black', WindowHandle1)</l>
+<c>* 设置字体信息</c>
+<l>set_display_font (WindowHandle1, 14, 'mono', 'true', 'false')</l>
+<c>* 显示图像</c>
+<l>dev_display (Image)</l>
+<c>* 右下角显示运行字样字符串</c>
+<l>disp_continue_message (WindowHandle1, 'black', 'true')</l>
+<l>stop ()</l>
+<c>* </c>
+<c>*************************************************************2.校正相机****************************************************************************</c>
+<c>* 标定文件名</c>
+<l>CaltabName := 'caltab_30mm.descr'</l>
+<c>* [Focus,Kappa,Sx，Sy,Cx，Cy,Whith，Height]</c>
+<l>StartCamPar := [0.0184898,-548.002,8.33409e-006,8.3e-006,275.291,255.374,640,480]</l>
+<c>*创建标定数据模型</c>
+<l>create_calib_data ('calibration_object', 1, 1, CalibDataID)</l>
+<c>*设置相机类型并初始化标定数据模型里的摄像机内部参数</c>
+<l>set_calib_data_cam_param (CalibDataID, 0, 'area_scan_division', StartCamPar)</l>
+<c>*为校正模型指定校正文件</c>
+<l>set_calib_data_calib_object (CalibDataID, 0, CaltabName)</l>
+<l>NumImages := 12</l>
+<l>for i := 1 to NumImages by 1</l>
+<c>    *读取图像</c>
+<l>    read_image (Image, 'scratch/scratch_calib_'+i$'02d')</l>
+<c>    *显示图像</c>
+<l>    dev_display (Image)</l>
+<c>    *获取校正板内边框以内的区域</c>
+<l>    find_caltab (Image, Caltab, CaltabName, 3, 112, 5)</l>
+<c>    *设置输出对象显示颜色</c>
+<l>    dev_set_color ('green')</l>
+<c>    *显示校正板内边框以内的区域</c>
+<l>    dev_display (Caltab)</l>
+<c>    *提取出图像中MARK点的位置并计算出摄像机外部参数</c>
+<l>    find_marks_and_pose (Image, Caltab, CaltabName, StartCamPar, 128, 10, 18, 0.9, 15, 100, RCoord, CCoord, StartPose)</l>
+<c>    *设置输出对象显示颜色</c>
+<l>    dev_set_color ('red')</l>
+<c>    *显示MARK点的位置</c>
+<l>    disp_circle (WindowHandle1, RCoord, CCoord, gen_tuple_const(|RCoord|,2.5))</l>
+<l>    dev_set_part (0, 0, Height-1, Width-1)</l>
+<c>    *收集观察数据</c>
+<l>    set_calib_data_observ_points (CalibDataID, 0, 0, i, RCoord, CCoord, 'all', StartPose)</l>
+<l>endfor</l>
+<l>dev_update_time ('on')</l>
+<l>disp_continue_message (WindowHandle1, 'black', 'true')</l>
+<l>stop ()</l>
+<c>*开始校正摄像机</c>
+<l>calibrate_cameras (CalibDataID, Error)</l>
+<c>*获取优化以后的摄像机内部参数</c>
+<l>get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)</l>
+<c>*获取优化以后的校正对象姿势，相对于当前参考相机。</c>
+<l>get_calib_data (CalibDataID, 'calib_obj_pose', [0,1], 'pose', PoseCalib)</l>
+<c></c>
+<c>*************************************************************3.图像转换****************************************************************************</c>
+<c>* </c>
+<l>dev_open_window (0, Width+5, Width, Height, 'black', WindowHandle2)</l>
+<l>set_display_font (WindowHandle2, 14, 'mono', 'true', 'false')</l>
+<c>*将校正对象姿势顺时针旋转90度</c>
+<l>insert (PoseCalib, PoseCalib[5] -90, 5, PoseCalibRot)</l>
+<c>*将摄像机位姿进行X,Y,Z的平移(矩阵乘积)</c>
+<l>set_origin_pose (PoseCalibRot, -0.04, -0.03, 0.00075, Pose)</l>
+<c>* 像素的实际物理长度</c>
+<l>PixelDist := 0.00013</l>
+<l>*pose_to_hom_mat3d (Pose, HomMat3D)</l>
+<c>*根据摄像机内参和外参生成一个投影变换，这个投影变换代表图像坐标系(z=0)到世界坐标系的转换关系</c>
+<l>gen_image_to_world_plane_map (Map, CamParam, Pose, Width, Height, Width, Height, PixelDist, 'bilinear')</l>
+<l>Imagefiles := ['scratch/scratch_calib_01', 'scratch/scratch_perspective']</l>
+<l>for i := 1 to 2 by 1</l>
+<c>    *读取图像</c>
+<l>    read_image (Image, Imagefiles[i-1])</l>
+<c>    *设置当前窗口为窗口一</c>
+<l>    dev_set_window (WindowHandle1)</l>
+<c>    *窗口一显示图像</c>
+<l>    dev_display (Image)</l>
+<c>    *设置当前窗口为窗口二</c>
+<l>    dev_set_window (WindowHandle2)</l>
+<c>    将投影变换应用到当前图像上</c>
+<l>    map_image (Image, Map, ModelImageMapped)</l>
+<c>    *映射以后的图像</c>
+<l>    dev_display (ModelImageMapped)</l>
+<l>    if (i=1)</l>
+<l>        gen_contour_polygon_xld (Polygon, [230, 230], [189, 189+0.03/PixelDist])</l>
+<l>        disp_message (WindowHandle2, '3cm', 'window', 205, 195, 'red', 'false')</l>
+<l>        dev_display (Polygon)</l>
+<l>        disp_continue_message (WindowHandle2, 'black', 'true')</l>
+<l>        stop ()</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<c>*************************************************************4.在世界坐标系下面对图像中的刮伤进行长度测量***************************************************</c>
+<c></c>
+<c>*设置区域填充模式</c>
+<l>dev_set_draw ('fill')</l>
+<c>*快速阈值</c>
+<l>fast_threshold (ModelImageMapped, Region, 0, 80, 20)</l>
+<c>*填充阈值后的区域</c>
+<l>fill_up (Region, RegionFillUp)</l>
+<c>*腐蚀上面的区域</c>
+<l>erosion_rectangle1 (RegionFillUp, RegionErosion, 5, 5)</l>
+<c>*将腐蚀后区域里的图像剪切出来</c>
+<l>reduce_domain (ModelImageMapped, RegionErosion, ImageReduced)</l>
+<c>*再对剪切的图形进行阈值</c>
+<l>fast_threshold (ImageReduced, Region1, 55, 100, 20)</l>
+<c>*对阈值区域膨胀运算</c>
+<l>dilation_circle (Region1, RegionDilation1, 2.0)</l>
+<c>*对膨胀区域进行腐蚀运算</c>
+<l>erosion_circle (RegionDilation1, RegionErosion1, 1.0)</l>
+<c>*连通性处理</c>
+<l>connection (RegionErosion1, ConnectedRegions)</l>
+<c>*根据面积来过滤连通处理后的区域</c>
+<l>select_shape (ConnectedRegions, SelectedRegions, ['area', 'ra'], 'and', [40, 15], [2000, 1000])</l>
+<c>*统计对象数目</c>
+<l>count_obj (SelectedRegions, NumScratches)</l>
+<c>*显示校正后的图像</c>
+<l>dev_display (ModelImageMapped)</l>
+<l>for i := 1 to NumScratches by 1</l>
+<c>    *设置输出对象的颜色</c>
+<l>    dev_set_color ('yellow')</l>
+<c>    *从SelectedRegions里根据索引获取子区域</c>
+<l>    select_obj (SelectedRegions, ObjectSelected, i)</l>
+<c>    *获取ObjectSelected区域的骨架</c>
+<l>    skeleton (ObjectSelected, Skeleton)</l>
+<c>    *获取骨架的轮廓XLD</c>
+<l>    gen_contours_skeleton_xld (Skeleton, Contours, 1, 'filter')</l>
+<c>    *显示缺陷的轮廓</c>
+<l>    dev_display (Contours)</l>
+<c>    *计算缺陷轮廓的长度</c>
+<l>    length_xld (Contours, ContLength)</l>
+<c>    *计算缺陷轮廓的面积和中心坐标</c>
+<l>    area_center_points_xld (Contours, Area, Row, Column)</l>
+<c>    *显示缺陷的长度信息</c>
+<l>    disp_message (WindowHandle2, 'L= '+(ContLength*PixelDist*100)$'.4'+' cm', 'window', Row-10, Column+20, 'yellow', 'false')</l>
+<l>    disp_continue_message (WindowHandle2, 'black', 'true')</l>
+<l>    stop ()</l>
+<l>endfor</l>
+<c></c>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+</hdevelop>
